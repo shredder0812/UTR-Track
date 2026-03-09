@@ -4,6 +4,11 @@
 
 **UTR-Track** (Universal Tracking with Transfer Learning) is an advanced object tracking system optimized for medical videos (endoscopy). The project combines YOLO for object detection with advanced trackers (StrongSort, UTRTrack) to track pathologies in endoscopic videos.
 
+### Tracking Results
+
+Comparision Results of 18 examination videos:
+[https://bit.ly/UTR-Track-results](https://bit.ly/UTR-Track-results)
+
 ### Key Features
 
 - **Multi-Pathology Detection**: Supports detection and tracking of various pathologies:

@@ -8,9 +8,9 @@ from torch import device
 from boxmot.appearance.reid.auto_backend import ReidAutoBackend
 from boxmot.motion.cmc import get_cmc_method
 from boxmot.trackers.basetracker import BaseTracker
-from boxmot.trackers.strongsort.sort.detection import Detection
-from boxmot.trackers.strongsort.sort.tracker import Tracker, TrackerXYSR, TrackerTLUKF
-from boxmot.trackers.strongsort.sort.linear_assignment import NearestNeighborDistanceMetric, NearestNeighborDistanceMetric_TLUKF
+from boxmot.trackers.utrtrack.sort.detection import Detection
+from boxmot.trackers.utrtrack.sort.tracker import TrackerTLUKF
+from boxmot.trackers.utrtrack.sort.linear_assignment import NearestNeighborDistanceMetric_TLUKF
 from boxmot.utils.ops import xyxy2tlwh, xyxy2xysr
 
 from boxmot.utils import logger as LOGGER
