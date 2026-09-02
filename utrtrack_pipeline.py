@@ -388,6 +388,7 @@ def main():
     parser = argparse.ArgumentParser(description="Object Detection and Tracking using YOLO and StrongSort/TLUKF")
     parser.add_argument("--video_dir", type=str, default="data/video_test", help="Thư mục chứa video đầu vào")
     parser.add_argument("--model_dir", type=str, default="model_yolo", help="Thư mục chứa mô hình YOLO")
+    parser.add_argument("--model_weights", type=str, default=None, help="Ép dùng một model YOLO duy nhất (bỏ qua việc chọn model theo cơ quan)")
     parser.add_argument("--output_dir", type=str, default="content3112/runs_tlukf_xysr_vbox_short", help="Thư mục đầu ra cho kết quả")
     parser.add_argument("--min_temporal_threshold", type=float, default=0, help="Ngưỡng thời gian tối thiểu")
     parser.add_argument("--max_temporal_threshold", type=float, default=0, help="Ngưỡng thời gian tối đa")
@@ -405,11 +406,17 @@ def main():
 
     for video_path in video_dir.rglob("*"):
         if video_path.suffix.lower() in video_extensions:
-            model_weights = (
-                model_dir / "thucquan.pt" if "UTTQ" in video_path.parts
-                else model_dir / "daday.pt" if "UTDD" in video_path.parts
-                else model_dir / "htt.pt"
-            )
+            # Chọn model YOLO theo cơ quan suy ra từ tên thư mục chứa video.
+            # Dùng --model_weights để ép một model duy nhất cho toàn bộ thư mục
+            # (ví dụ khi chạy Hyper-Kvasir, nơi cấu trúc thư mục không theo UTTQ/UTDD).
+            if args.model_weights:
+                model_weights = Path(args.model_weights)
+            else:
+                model_weights = (
+                    model_dir / "thucquan.pt" if "UTTQ" in video_path.parts
+                    else model_dir / "daday.pt" if "UTDD" in video_path.parts
+                    else model_dir / "htt.pt"
+                )
             print(f"Processing video: {video_path} with model: {model_weights} | Tracker: {args.tracker_type}")
             detector = ObjectDetection(
                 model_weights=str(model_weights),
