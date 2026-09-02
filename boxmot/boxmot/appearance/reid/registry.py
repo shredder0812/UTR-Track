@@ -18,6 +18,9 @@ class ReIDModelRegistry:
 
     @staticmethod
     def get_model_name(model):
+        if "osnet_dcn_x0_5_hybrid" in model.name or "osnet_dcn_x0_5_kvasir" in model.name:
+            return "osnet_dcn_x0_5_endocv"  # Same architecture, only the weights file differs
+
         for name in MODEL_TYPES:
             if name in model.name:
                 return name

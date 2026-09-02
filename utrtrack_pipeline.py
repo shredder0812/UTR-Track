@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-from boxmot import StrongSort, StrongSortXYSR, StrongSortTLUKF, UTRTrack
+from boxmot import StrongSortXYSR, UTRTrack
 from datetime import datetime, timedelta
 import numpy as np
 
@@ -94,20 +94,13 @@ class ObjectDetection:
                 ema_alpha=ema_alpha,
                 mc_lambda=mc_lambda,
                 per_class=False,
-                # Appearance matching thresholds
-                # max_cos_dist=0.8,  # CRITICAL: Tăng từ 0.2 → 0.4 để giảm ID switches
-                #                    # Cosine distance: 0 = giống hệt, 1 = khác hoàn toàn
-                #                    # 0.4 cho phép match với features tương tự nhưng không giống 100%
-                # nn_budget=500,     # Giữ 500 features trong gallery
-                # # Motion matching
-                # max_iou_dist=0.5,  # IoU threshold cho motion matching
-                # # Track lifecycle
-                # max_age=500,       # Keep track alive 500 frames khi miss
-                # n_init=3,          # CRITICAL: Giảm từ 3 → 1 để confirm track nhanh hơn
-                #                    # Endoscopy: object xuất hiện ít frames → cần confirm nhanh
-                # # Feature smoothing
-                # ema_alpha=0.9,     # EMA weight cho feature smoothing
-                # mc_lambda=0.5,   # Motion consistency weight
+                single_object_mode=True,
+                reacquire_min_iou=0.03,
+                reacquire_max_cost=0.60,
+                reacquire_max_age=30,
+                max_virtual_age=5,
+                virtual_recent_hq_gap=4,
+                virtual_conf=0.28,
             )
         else:
             # Mặc định dùng StrongSortXYSR

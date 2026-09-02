@@ -10,7 +10,7 @@ from boxmot.trackers.bytetrack.bytetrack import ByteTrack
 from boxmot.trackers.deepocsort.deepocsort import DeepOcSort
 from boxmot.trackers.hybridsort.hybridsort import HybridSort
 from boxmot.trackers.ocsort.ocsort import OcSort
-from boxmot.trackers.strongsort.strongsort import StrongSort, StrongSortXYSR, StrongSortTLUKF
+from boxmot.trackers.strongsort.strongsort import StrongSort, StrongSortXYSR
 from boxmot.trackers.utrtrack.utrtrack import UTRTrack
 
 TRACKERS = [
@@ -22,7 +22,6 @@ TRACKERS = [
     "hybridsort",
     "boosttrack",
     "strongsortxysr",
-    "strongsorttlukf",
     "utrtrack",
 ]
 
@@ -30,7 +29,6 @@ __all__ = (
     "__version__",
     "StrongSort",
     "StrongSortXYSR",
-    "StrongSortTLUKF",
     "OcSort",
     "ByteTrack",
     "BotSort",

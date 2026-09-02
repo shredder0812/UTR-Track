@@ -195,7 +195,15 @@ return UTRTrack(
     n_init=1,              # Min detections to confirm track
     ema_alpha=0.95,        # EMA smoothing factor
     mc_lambda=0.98,        # Motion consistency weight
-    per_class=False        # Cross-class tracking
+    per_class=False,       # Cross-class tracking
+    single_object_mode=True,      # Prefer re-associating the one tracked
+                                   # lesion over spawning a new ID
+    reacquire_min_iou=0.03,       # Single-object re-association: min IoU
+    reacquire_max_cost=0.60,      # Single-object re-association: max appearance cost
+    reacquire_max_age=30,         # Single-object re-association: max frames since last update
+    max_virtual_age=5,            # Max consecutive frames a virtual box may be emitted for
+    virtual_recent_hq_gap=4,      # Virtual box requires high-quality evidence within N frames
+    virtual_conf=0.28,            # Base confidence for virtual (predicted) boxes
 )
 ```
 
