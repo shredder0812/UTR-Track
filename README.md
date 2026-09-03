@@ -66,29 +66,31 @@ cd UTR-Track
 
 2. **Install dependencies**:
 
-**Method 1: Using pip (recommended)**
 ```bash
-# Install basic packages
 pip install -r requirements.txt
 
-# Or manually install main packages:
+# PyTorch, matching your CUDA version:
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121  # GPU
-# pip install torch torchvision  # CPU
-
-pip install ultralytics opencv-python numpy pandas
+# pip install torch torchvision                                                    # CPU
 ```
 
-**Method 2: Install boxmot from source**
+**About `boxmot`**: this repository vendors its own fork of BoxMOT under `boxmot/`,
+which is where `UTRTrack` lives. The upstream `boxmot` package on PyPI does **not**
+contain it. `utrtrack_pipeline.py` puts the vendored copy at the front of `sys.path`,
+so the pipeline works from a plain clone with no extra step. If you import `boxmot`
+from your own scripts, install the fork explicitly so it takes precedence:
+
 ```bash
-cd boxmot
-pip install -e .
-cd ..
+pip install -e boxmot/
+python -c "import boxmot; print(boxmot.__file__)"   # must point inside this repo
 ```
 
-3. **Download ReID weights** (if not available):
+3. **ReID weights**:
 ```bash
-# File osnet_dcn_x0_5_endocv.pt should be placed in the root directory
-# If not available, download from link or train ReID model
+# Place the OSNet-DCN weights in the repository root.
+#   osnet_dcn_x0_5_endocv.pt   OSNet-DCN   (trained on IGH ReID)          -- default
+#   osnet_dcn_x0_5_hybrid.pt   OSNet-DCN*  (IGH ReID + HyperKvasir ReID)
+# Select one at run time with --reid_weights.
 ```
 
 4. **Prepare YOLO models**:
@@ -141,12 +143,35 @@ python utrtrack_pipeline.py \
 |---------|----------|-------|
 | `--video_dir` | `data/video_test` | Directory containing input videos |
 | `--model_dir` | `model_yolo` | Directory containing YOLO models |
-| `--output_dir` | `content/runs` | Output directory for results |
+| `--model_weights` | *(none)* | Force one YOLO model for every video, bypassing organ-based selection. Required for datasets whose layout has no `UTTQ`/`UTDD` folders, such as Hyper-Kvasir |
+| `--reid_weights` | `osnet_dcn_x0_5_endocv.pt` | ReID weights. `osnet_dcn_x0_5_endocv.pt` = OSNet-DCN, `osnet_dcn_x0_5_hybrid.pt` = OSNet-DCN* |
+| `--output_dir` | **required** | Output directory. Convention: `content/exp_<id>_<var><value>`. Never reuse a directory from a previous experiment |
 | `--tracker_type` | `tlukf` | Tracker type: `tlukf` (UTRTrack) or `xysr` (StrongSort) |
 | `--iou_threshold` | `0.1` | IoU threshold for track matching |
 | `--min_temporal_threshold` | `0` | Minimum temporal threshold (frames) |
 | `--max_temporal_threshold` | `0` | Maximum temporal threshold (frames) |
 | `--use_frame_id` | `False` | Use frame ID instead of timestamp |
+
+### 5. Reproducing the paper results
+
+Both appearance models reported in the paper are reproduced from this repository by
+changing `--reid_weights` only; every other condition is held fixed.
+
+```bash
+# IGH, OSNet-DCN  -> Table "Detailed MOT metrics", OSNet-DCN rows of the comparison table
+python utrtrack_pipeline.py --video_dir data/video_test --model_dir model_yolo     --reid_weights osnet_dcn_x0_5_endocv.pt --output_dir content/exp_igh_osnetdcn
+
+# IGH, OSNet-DCN* -> Table "Per-sequence MOT metrics", OSNet-DCN* rows
+python utrtrack_pipeline.py --video_dir data/video_test --model_dir model_yolo     --reid_weights osnet_dcn_x0_5_hybrid.pt --output_dir content/exp_igh_osnetdcn_hybrid
+
+# Hyper-Kvasir: no UTTQ/UTDD layout, so the detector must be forced
+python utrtrack_pipeline.py --video_dir data/hyper_kvasir/upper-gi-tract/valid     --model_weights model_yolo/thucquan.pt --output_dir content/exp_kvasir
+```
+
+The detector is otherwise chosen per organ from the video's directory path
+(`UTTQ` -> `thucquan.pt`, `UTDD` -> `daday.pt`, else `htt.pt`). Every run prints
+`Processing video: ... with model: ... | ReID: ...`; check that line matches the
+organ before using a run for reported numbers.
 
 ## Output
 

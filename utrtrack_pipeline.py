@@ -1,15 +1,23 @@
 import argparse
-import os
 import csv
+import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import perf_counter
+
 import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-from boxmot import StrongSortXYSR, UTRTrack
-from datetime import datetime, timedelta
-import numpy as np
+
+# This repository vendors its own fork of BoxMOT (boxmot/), which carries the
+# UTRTrack tracker. Put it ahead of site-packages so an unrelated `boxmot`
+# installation cannot shadow it.
+_VENDORED_BOXMOT = Path(__file__).resolve().parent / "boxmot"
+if (_VENDORED_BOXMOT / "boxmot" / "__init__.py").is_file():
+    sys.path.insert(0, str(_VENDORED_BOXMOT))
+
+from boxmot import StrongSortXYSR, UTRTrack  # noqa: E402  (must follow sys.path setup)
 
 # Định nghĩa từ điển lớp cho các mô hình
 MODEL_CLASSES_DICT = {
@@ -39,7 +47,8 @@ class ObjectDetection:
     """Lớp thực hiện phát hiện và theo dõi đối tượng trong video sử dụng YOLO và StrongSort hoặc TLUKF."""
 
     def __init__(self, model_weights, capture_path, output_dir, min_temporal_threshold=0, max_temporal_threshold=0,
-                 iou_threshold=0.1, use_frame_id=False, tracker_type="xysr"):
+                 iou_threshold=0.1, use_frame_id=False, tracker_type="xysr",
+                 reid_weights="osnet_dcn_x0_5_endocv.pt"):
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         print(f"Using Device: {self.device}")
         self.model = self._load_model(model_weights)
@@ -55,6 +64,7 @@ class ObjectDetection:
         self.mot_folder.mkdir(parents=True, exist_ok=True)
         self.cap = self._load_capture()
         self.tracker_type = tracker_type
+        self.reid_weights = Path(reid_weights)
         self.tracker = self._initialize_tracker()
         self.min_temporal_threshold = min_temporal_threshold
         self.max_temporal_threshold = max_temporal_threshold
@@ -78,10 +88,10 @@ class ObjectDetection:
         return results
 
     def _initialize_tracker(self):
-        """Khởi tạo tracker phù hợp: StrongSortXYSR hoặc TLUKF."""
-        reid_weights = Path("osnet_dcn_x0_5_endocv.pt")
+        """Khởi tạo tracker phù hợp: UTRTrack (tlukf) hoặc StrongSortXYSR."""
+        reid_weights = self.reid_weights
         if self.tracker_type == "tlukf":
-            max_cos_dist,max_iou_dist,max_age,n_init,ema_alpha,mc_lambda = 0.9,	0.9, 500, 1, 0.95, 0.98,
+            max_cos_dist, max_iou_dist, max_age, n_init, ema_alpha, mc_lambda = 0.9, 0.9, 500, 1, 0.95, 0.98
             # Khởi tạo tracker TLUKF với thông số tối ưu cho endoscopy
             return UTRTrack(
                 reid_weights=reid_weights,
@@ -388,13 +398,20 @@ def main():
     parser = argparse.ArgumentParser(description="Object Detection and Tracking using YOLO and StrongSort/TLUKF")
     parser.add_argument("--video_dir", type=str, default="data/video_test", help="Thư mục chứa video đầu vào")
     parser.add_argument("--model_dir", type=str, default="model_yolo", help="Thư mục chứa mô hình YOLO")
-    parser.add_argument("--model_weights", type=str, default=None, help="Ép dùng một model YOLO duy nhất (bỏ qua việc chọn model theo cơ quan)")
-    parser.add_argument("--output_dir", type=str, default="content3112/runs_tlukf_xysr_vbox_short", help="Thư mục đầu ra cho kết quả")
+    parser.add_argument("--model_weights", type=str, default=None,
+                        help="Ép dùng một model YOLO duy nhất cho mọi video (bỏ qua việc chọn model theo cơ quan)")
+    parser.add_argument("--reid_weights", type=str, default="osnet_dcn_x0_5_endocv.pt",
+                        help="Weight ReID: osnet_dcn_x0_5_endocv.pt = OSNet-DCN, "
+                             "osnet_dcn_x0_5_hybrid.pt = OSNet-DCN*")
+    parser.add_argument("--output_dir", type=str, required=True,
+                        help="Thư mục đầu ra, quy ước content/exp_<id>_<biến><giá trị>. "
+                             "Không bao giờ ghi đè một thí nghiệm cũ.")
     parser.add_argument("--min_temporal_threshold", type=float, default=0, help="Ngưỡng thời gian tối thiểu")
     parser.add_argument("--max_temporal_threshold", type=float, default=0, help="Ngưỡng thời gian tối đa")
     parser.add_argument("--iou_threshold", type=float, default=0.1, help="Ngưỡng IoU cho cập nhật ID")
     parser.add_argument("--use_frame_id", action="store_true", help="Sử dụng frame ID để tính thời gian")
-    parser.add_argument("--tracker_type", type=str, default="tlukf", choices=["xysr", "tlukf"], help="Chọn loại tracker: xysr hoặc tlukf")
+    parser.add_argument("--tracker_type", type=str, default="tlukf", choices=["xysr", "tlukf"],
+                        help="Chọn loại tracker: tlukf (UTRTrack) hoặc xysr (StrongSortXYSR)")
 
     args = parser.parse_args()
 
@@ -417,7 +434,8 @@ def main():
                     else model_dir / "daday.pt" if "UTDD" in video_path.parts
                     else model_dir / "htt.pt"
                 )
-            print(f"Processing video: {video_path} with model: {model_weights} | Tracker: {args.tracker_type}")
+            print(f"Processing video: {video_path} with model: {model_weights} | "
+                  f"Tracker: {args.tracker_type} | ReID: {args.reid_weights}")
             detector = ObjectDetection(
                 model_weights=str(model_weights),
                 capture_path=video_path,
@@ -426,7 +444,8 @@ def main():
                 max_temporal_threshold=args.max_temporal_threshold,
                 iou_threshold=args.iou_threshold,
                 use_frame_id=args.use_frame_id,
-                tracker_type=args.tracker_type
+                tracker_type=args.tracker_type,
+                reid_weights=args.reid_weights
             )
             start_video_time = perf_counter()
             detector()
