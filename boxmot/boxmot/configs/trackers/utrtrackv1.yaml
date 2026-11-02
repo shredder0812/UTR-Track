@@ -1,0 +1,99 @@
+# UTR-Track-v1 (class UTRTrackV1): XYSR TL-UKF with calibrated Q, three-tier association,
+# re-acquisition, identity-preserving birth control and lost-track absorption.
+# Defaults = values used by utrtrack_pipeline.py --tracker_type utrtrack_v1 (thesis).
+# The pipeline also runs YOLO at conf 0.1 and class-agnostic NMS (IoU 0.45) before the tracker.
+
+min_conf:
+  type: uniform
+  default: 0.1
+  range: [0.1, 0.5]
+
+max_cos_dist:
+  type: uniform
+  default: 0.9
+  range: [0.2, 0.95]
+
+max_iou_dist:
+  type: uniform
+  default: 0.9
+  range: [0.5, 0.95]
+
+max_age:
+  type: randint
+  default: 500
+  range: [30, 1001]  # upper bound exclusive
+
+n_init:
+  type: randint
+  default: 3
+  range: [1, 4]  # upper bound exclusive
+
+nn_budget:
+  type: choice
+  default: 100
+  options: [100]
+
+mc_lambda:
+  type: uniform
+  default: 0.98
+  range: [0.5, 1.0]
+
+ema_alpha:
+  type: uniform
+  default: 0.95
+  range: [0.7, 0.99]
+
+reacquire_min_iou:
+  type: uniform
+  default: 0.01
+  range: [0.0, 0.3]
+
+reacquire_max_cost:
+  type: uniform
+  default: 0.75
+  range: [0.3, 0.9]
+
+max_virtual_age:
+  type: randint
+  default: 5
+  range: [1, 31]  # upper bound exclusive
+
+virtual_recent_hq_gap:
+  type: randint
+  default: 4
+  range: [1, 13]  # upper bound exclusive
+
+virtual_conf:
+  type: uniform
+  default: 0.28
+  range: [0.1, 0.34]
+
+byte_low_conf_thresh:
+  type: uniform
+  default: 0.45
+  range: [0.2, 0.6]
+
+q_calibration_scale:
+  type: choice
+  default: 1.0
+  options: [1.0, 3.0, 10.0]
+
+absorption_iou:
+  type: uniform
+  default: 0.3
+  range: [0.2, 0.5]
+
+absorption_app_sim:
+  type: uniform
+  default: 0.7
+  range: [0.6, 0.8]
+
+birth_iou:
+  type: uniform
+  default: 0.3
+  range: [0.2, 0.5]
+
+birth_contain:
+  type: uniform
+  default: 0.8
+  range: [0.6, 0.9]

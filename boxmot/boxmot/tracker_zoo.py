@@ -68,6 +68,7 @@ def create_tracker(
         "hybridsort": "boxmot.trackers.hybridsort.hybridsort.HybridSort",
         "boosttrack": "boxmot.trackers.boosttrack.boosttrack.BoostTrack",
         "utrtrack"  : "boxmot.trackers.utrtrack.utrtrack.UTRTrack",
+        "utrtrackv1": "boxmot.trackers.utrtrack_v1.utrtrack_v1.UTRTrackV1",
     }
 
     # Check if the tracker type exists in the mapping
@@ -86,13 +87,14 @@ def create_tracker(
         "hybridsort",
         "boosttrack",
         "utrtrack",
+        "utrtrackv1",
     ]:
         tracker_args["per_class"] = per_class
         tracker_args.update(reid_args)
         if tracker_type in ["strongsort"]:
             tracker_args.pop("per_class")  # per class not supported by
-        if tracker_type in ["utrtrack"]:
-            tracker_args.pop("per_class")  # per class not supported by
+        if tracker_type in ["utrtrack", "utrtrackv1"]:
+            tracker_args.pop("per_class")  # cross-class tracking is part of UTR-Track
     else:
         tracker_args["per_class"] = per_class
 

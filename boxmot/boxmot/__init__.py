@@ -12,6 +12,10 @@ from boxmot.trackers.hybridsort.hybridsort import HybridSort
 from boxmot.trackers.ocsort.ocsort import OcSort
 from boxmot.trackers.strongsort.strongsort import StrongSort, StrongSortXYSR
 from boxmot.trackers.utrtrack.utrtrack import UTRTrack
+from boxmot.trackers.utrtrack_v1.utrtrack_v1 import UTRTrackV1
+
+# UTR-Track-v0 is the original UTRTrack class (XYAH TL-UKF, single-object mode).
+UTRTrackV0 = UTRTrack
 
 TRACKERS = [
     "bytetrack",
@@ -23,6 +27,7 @@ TRACKERS = [
     "boosttrack",
     "strongsortxysr",
     "utrtrack",
+    "utrtrackv1",
 ]
 
 __all__ = (
@@ -38,5 +43,7 @@ __all__ = (
     "create_tracker",
     "get_tracker_config",
     "gsi",
-    "UTRTrack"
+    "UTRTrack",
+    "UTRTrackV0",
+    "UTRTrackV1",
 )

@@ -18,3 +18,10 @@ results_vids/
 .vscode/
 .idea/
 .DS_Store
+
+
+paper/
+luanvan/
+.claude/
+new_review.txt
+plan.md

@@ -151,6 +151,7 @@ def gate_cost_matrix(
     mc_lambda,
     gated_cost=INFTY_COST,
     only_position=False,
+    measurement_fn=None,
 ):
     """Invalidate infeasible entries in cost matrix based on the state
     distributions obtained by Kalman filtering.
@@ -178,6 +179,9 @@ def gate_cost_matrix(
     only_position : Optional[bool]
         If True, only the x, y position of the state distribution is considered
         during gating. Defaults to False.
+    measurement_fn : Optional[Callable[[Detection], ndarray]]
+        Converts a detection into the measurement space of the tracks' Kalman
+        filter: `to_xyah` (UTR-Track-v0, the default) or `to_xysr` (UTR-Track-v1).
     Returns
     -------
     ndarray
@@ -185,7 +189,9 @@ def gate_cost_matrix(
     """
 
     gating_threshold = chi2inv95[4]
-    measurements = np.asarray([detections[i].to_xyah() for i in detection_indices])
+    if measurement_fn is None:
+        measurement_fn = lambda d: d.to_xyah()  # noqa: E731
+    measurements = np.asarray([measurement_fn(detections[i]) for i in detection_indices])
     for row, track_idx in enumerate(track_indices):
         track = tracks[track_idx]
         gating_distance = track.kf.gating_distance(

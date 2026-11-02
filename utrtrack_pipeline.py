@@ -17,7 +17,8 @@ _VENDORED_BOXMOT = Path(__file__).resolve().parent / "boxmot"
 if (_VENDORED_BOXMOT / "boxmot" / "__init__.py").is_file():
     sys.path.insert(0, str(_VENDORED_BOXMOT))
 
-from boxmot import StrongSortXYSR, UTRTrack  # noqa: E402  (must follow sys.path setup)
+from boxmot import StrongSortXYSR  # noqa: E402  (must follow sys.path setup)
+from utrtrack_versions import VERSIONS, build_tracker, preprocess_detections  # noqa: E402
 
 # Định nghĩa từ điển lớp cho các mô hình
 MODEL_CLASSES_DICT = {
@@ -48,7 +49,7 @@ class ObjectDetection:
 
     def __init__(self, model_weights, capture_path, output_dir, min_temporal_threshold=0, max_temporal_threshold=0,
                  iou_threshold=0.1, use_frame_id=False, tracker_type="xysr",
-                 reid_weights="osnet_dcn_x0_5_endocv.pt"):
+                 reid_weights=None):
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         print(f"Using Device: {self.device}")
         self.model = self._load_model(model_weights)
@@ -64,6 +65,13 @@ class ObjectDetection:
         self.mot_folder.mkdir(parents=True, exist_ok=True)
         self.cap = self._load_capture()
         self.tracker_type = tracker_type
+        # UTR-Track version (utrtrack_v0 / utrtrack_v1 / tlukf = v0); None for the StrongSORT baseline.
+        self.version = VERSIONS.get(tracker_type)
+        # YOLO confidence threshold: 0.45 for v0 and StrongSORT, 0.1 for v1 (weak detections
+        # are only used by v1's low-confidence association tier).
+        self.det_conf = self.version.det_conf if self.version is not None else 0.45
+        if reid_weights is None:
+            reid_weights = self.version.reid_weights if self.version is not None else "osnet_dcn_x0_5_endocv.pt"
         self.reid_weights = Path(reid_weights)
         self.tracker = self._initialize_tracker()
         self.min_temporal_threshold = min_temporal_threshold
@@ -84,34 +92,14 @@ class ObjectDetection:
         # - Source tracker: Will filter and use only conf ≥ 0.6 (high quality)
         # - Primary tracker: Will use ALL detections conf ≥ 0.3 (including low-conf)
         # - Transfer Learning: Primary learns from Source during gaps
-        results = self.model(frame, stream=True, verbose=False, conf=0.45, line_width=1)
+        results = self.model(frame, stream=True, verbose=False, conf=self.det_conf, line_width=1)
         return results
 
     def _initialize_tracker(self):
-        """Khởi tạo tracker phù hợp: UTRTrack (tlukf) hoặc StrongSortXYSR."""
+        """Khởi tạo tracker: UTR-Track-v0 / UTR-Track-v1 (cấu hình trong utrtrack_versions.py) hoặc StrongSortXYSR."""
         reid_weights = self.reid_weights
-        if self.tracker_type == "tlukf":
-            max_cos_dist, max_iou_dist, max_age, n_init, ema_alpha, mc_lambda = 0.9, 0.9, 500, 1, 0.95, 0.98
-            # Khởi tạo tracker TLUKF với thông số tối ưu cho endoscopy
-            return UTRTrack(
-                reid_weights=reid_weights,
-                device=torch.device(self.device),
-                half=False,
-                max_cos_dist=max_cos_dist,
-                max_iou_dist=max_iou_dist,
-                max_age=max_age,
-                n_init=n_init,
-                ema_alpha=ema_alpha,
-                mc_lambda=mc_lambda,
-                per_class=False,
-                single_object_mode=True,
-                reacquire_min_iou=0.03,
-                reacquire_max_cost=0.60,
-                reacquire_max_age=30,
-                max_virtual_age=5,
-                virtual_recent_hq_gap=4,
-                virtual_conf=0.28,
-            )
+        if self.version is not None:
+            return build_tracker(self.version, reid_weights, torch.device(self.device), half=False)
         else:
             # Mặc định dùng StrongSortXYSR
             return StrongSortXYSR(
@@ -351,7 +339,11 @@ class ObjectDetection:
 
                 for dets in detections:
                     det_boxes = dets.boxes.data.to("cpu").numpy()
-                    
+
+                    # v1: class-agnostic NMS before the tracker (no-op for v0 / StrongSORT)
+                    if self.version is not None:
+                        det_boxes = preprocess_detections(self.version, det_boxes)
+
                     # TLUKF: Pass ALL detections to tracker
                     # - Tracker will internally handle Source (conf ≥ 0.6) vs Primary (all conf ≥ 0.3)
                     # - No need to split here - let TLUKF's dual-tracker architecture handle it
@@ -393,16 +385,105 @@ class ObjectDetection:
 
         print(f"Finished: {self.video_name} -> {self.video_folder}")
 
+TRACKER_CHOICES = ["utrtrack_v0", "utrtrack_v1", "tlukf", "xysr"]
+
+
+def run_pipeline(video_dir, output_dir, tracker_type="tlukf", model_dir="model_yolo", model_weights=None,
+                 reid_weights=None, min_temporal_threshold=0, max_temporal_threshold=0, iou_threshold=0.1,
+                 use_frame_id=False):
+    """Chạy phát hiện + theo bám cho một video hoặc mọi video trong một thư mục.
+
+    Args:
+        video_dir: một file video, hoặc thư mục (quét đệ quy .mp4/.avi/.mov).
+        output_dir: thư mục đầu ra (không dùng lại thư mục của thí nghiệm cũ).
+        tracker_type: ``utrtrack_v0``, ``utrtrack_v1``, ``tlukf`` (= v0, tên cũ) hoặc ``xysr`` (StrongSORT).
+        model_dir: thư mục chứa daday.pt / thucquan.pt / htt.pt (chọn theo cơ quan: UTTQ / UTDD / còn lại).
+        model_weights: ép một model YOLO cho mọi video (bỏ qua chọn theo cơ quan).
+        reid_weights: trọng số ReID; None = mặc định của phiên bản (v0: endocv, v1: hybrid).
+    """
+    if tracker_type not in TRACKER_CHOICES:
+        raise ValueError(f"tracker_type phải thuộc {TRACKER_CHOICES}, nhận được {tracker_type!r}")
+    video_dir = Path(video_dir)
+    model_dir = Path(model_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)  # Tạo thư mục đầu ra nếu chưa tồn tại
+    video_extensions = (".mp4", ".avi", ".mov")
+    version = VERSIONS.get(tracker_type)
+    tracker_label = version.label if version is not None else "StrongSortXYSR"
+    if reid_weights is None:
+        reid_weights = version.reid_weights if version is not None else "osnet_dcn_x0_5_endocv.pt"
+
+    # --video_dir có thể là một file video: khi đó chỉ chạy đúng video này.
+    video_paths = [video_dir] if video_dir.is_file() else sorted(video_dir.rglob("*"))
+    for video_path in video_paths:
+        if video_path.suffix.lower() in video_extensions:
+            # Chọn model YOLO theo cơ quan suy ra từ tên thư mục chứa video.
+            # Dùng --model_weights để ép một model duy nhất cho toàn bộ thư mục
+            # (ví dụ khi chạy Hyper-Kvasir, nơi cấu trúc thư mục không theo UTTQ/UTDD).
+            if model_weights:
+                video_model = Path(model_weights)
+            else:
+                video_model = (
+                    model_dir / "thucquan.pt" if "UTTQ" in video_path.parts
+                    else model_dir / "daday.pt" if "UTDD" in video_path.parts
+                    else model_dir / "htt.pt"
+                )
+            print(f"Processing video: {video_path} with model: {video_model} | "
+                  f"Tracker: {tracker_label} ({tracker_type}) | ReID: {reid_weights}")
+            detector = ObjectDetection(
+                model_weights=str(video_model),
+                capture_path=video_path,
+                output_dir=output_dir,
+                min_temporal_threshold=min_temporal_threshold,
+                max_temporal_threshold=max_temporal_threshold,
+                iou_threshold=iou_threshold,
+                use_frame_id=use_frame_id,
+                tracker_type=tracker_type,
+                reid_weights=reid_weights,
+            )
+            start_video_time = perf_counter()
+            detector()
+            end_video_time = perf_counter()
+            print(f"Time taken for {video_path.name}: {end_video_time - start_video_time:.2f} seconds")
+
+
+def version_cli(tracker_type, argv=None):
+    """CLI rút gọn cho một phiên bản cố định (dùng bởi run_utrtrack_v0.py / run_utrtrack_v1.py)."""
+    version = VERSIONS[tracker_type]
+    parser = argparse.ArgumentParser(
+        description=f"Run {version.label} with its official configuration (see utrtrack_versions.py)")
+    parser.add_argument("--video", type=str, required=True, help="File video hoặc thư mục chứa video")
+    parser.add_argument("--output_dir", type=str, required=True,
+                        help="Thư mục đầu ra mới (không ghi đè thí nghiệm cũ)")
+    parser.add_argument("--model_dir", type=str, default="model_yolo",
+                        help="Thư mục chứa daday.pt / thucquan.pt / htt.pt")
+    parser.add_argument("--model_weights", type=str, default=None,
+                        help="Ép một model YOLO cho mọi video (bắt buộc với dữ liệu không có thư mục UTTQ/UTDD)")
+    parser.add_argument("--reid_weights", type=str, default=None,
+                        help=f"Trọng số ReID (mặc định {version.reid_weights})")
+    args = parser.parse_args(argv)
+    run_pipeline(
+        video_dir=args.video,
+        output_dir=args.output_dir,
+        tracker_type=tracker_type,
+        model_dir=args.model_dir,
+        model_weights=args.model_weights,
+        reid_weights=args.reid_weights,
+    )
+
+
 def main():
     """Chức năng chính để xử lý video với các tham số từ argparse."""
-    parser = argparse.ArgumentParser(description="Object Detection and Tracking using YOLO and StrongSort/TLUKF")
-    parser.add_argument("--video_dir", type=str, default="data/video_test", help="Thư mục chứa video đầu vào")
+    parser = argparse.ArgumentParser(description="Lesion detection (YOLO) and tracking (UTR-Track v0/v1, StrongSORT)")
+    parser.add_argument("--video_dir", type=str, default="data/video_test",
+                        help="Thư mục chứa video đầu vào, hoặc đường dẫn một file video")
     parser.add_argument("--model_dir", type=str, default="model_yolo", help="Thư mục chứa mô hình YOLO")
     parser.add_argument("--model_weights", type=str, default=None,
                         help="Ép dùng một model YOLO duy nhất cho mọi video (bỏ qua việc chọn model theo cơ quan)")
-    parser.add_argument("--reid_weights", type=str, default="osnet_dcn_x0_5_endocv.pt",
+    parser.add_argument("--reid_weights", type=str, default=None,
                         help="Weight ReID: osnet_dcn_x0_5_endocv.pt = OSNet-DCN, "
-                             "osnet_dcn_x0_5_hybrid.pt = OSNet-DCN*")
+                             "osnet_dcn_x0_5_hybrid.pt = OSNet-DCN*. Mặc định theo phiên bản: "
+                             "v0 -> endocv, v1 -> hybrid, xysr -> endocv")
     parser.add_argument("--output_dir", type=str, required=True,
                         help="Thư mục đầu ra, quy ước content/exp_<id>_<biến><giá trị>. "
                              "Không bao giờ ghi đè một thí nghiệm cũ.")
@@ -410,47 +491,23 @@ def main():
     parser.add_argument("--max_temporal_threshold", type=float, default=0, help="Ngưỡng thời gian tối đa")
     parser.add_argument("--iou_threshold", type=float, default=0.1, help="Ngưỡng IoU cho cập nhật ID")
     parser.add_argument("--use_frame_id", action="store_true", help="Sử dụng frame ID để tính thời gian")
-    parser.add_argument("--tracker_type", type=str, default="tlukf", choices=["xysr", "tlukf"],
-                        help="Chọn loại tracker: tlukf (UTRTrack) hoặc xysr (StrongSortXYSR)")
+    parser.add_argument("--tracker_type", type=str, default="tlukf", choices=TRACKER_CHOICES,
+                        help="utrtrack_v1 = UTR-Track-v1 (luận văn), utrtrack_v0 = UTR-Track-v0 (bài báo MBEC), "
+                             "tlukf = tên cũ của utrtrack_v0 (mặc định, giữ tương thích), xysr = StrongSortXYSR")
 
     args = parser.parse_args()
-
-    video_dir = Path(args.video_dir)
-    model_dir = Path(args.model_dir)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)  # Tạo thư mục đầu ra nếu chưa tồn tại
-    video_extensions = (".mp4", ".avi", ".mov")
-
-    for video_path in video_dir.rglob("*"):
-        if video_path.suffix.lower() in video_extensions:
-            # Chọn model YOLO theo cơ quan suy ra từ tên thư mục chứa video.
-            # Dùng --model_weights để ép một model duy nhất cho toàn bộ thư mục
-            # (ví dụ khi chạy Hyper-Kvasir, nơi cấu trúc thư mục không theo UTTQ/UTDD).
-            if args.model_weights:
-                model_weights = Path(args.model_weights)
-            else:
-                model_weights = (
-                    model_dir / "thucquan.pt" if "UTTQ" in video_path.parts
-                    else model_dir / "daday.pt" if "UTDD" in video_path.parts
-                    else model_dir / "htt.pt"
-                )
-            print(f"Processing video: {video_path} with model: {model_weights} | "
-                  f"Tracker: {args.tracker_type} | ReID: {args.reid_weights}")
-            detector = ObjectDetection(
-                model_weights=str(model_weights),
-                capture_path=video_path,
-                output_dir=output_dir,
-                min_temporal_threshold=args.min_temporal_threshold,
-                max_temporal_threshold=args.max_temporal_threshold,
-                iou_threshold=args.iou_threshold,
-                use_frame_id=args.use_frame_id,
-                tracker_type=args.tracker_type,
-                reid_weights=args.reid_weights
-            )
-            start_video_time = perf_counter()
-            detector()
-            end_video_time = perf_counter()
-            print(f"Time taken for {video_path.name}: {end_video_time - start_video_time:.2f} seconds")
+    run_pipeline(
+        video_dir=args.video_dir,
+        output_dir=args.output_dir,
+        tracker_type=args.tracker_type,
+        model_dir=args.model_dir,
+        model_weights=args.model_weights,
+        reid_weights=args.reid_weights,
+        min_temporal_threshold=args.min_temporal_threshold,
+        max_temporal_threshold=args.max_temporal_threshold,
+        iou_threshold=args.iou_threshold,
+        use_frame_id=args.use_frame_id,
+    )
 
 if __name__ == "__main__":
     main()
