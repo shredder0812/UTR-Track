@@ -371,6 +371,9 @@ return StrongSortXYSR(
 - [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
 - [StrongSort Paper](https://arxiv.org/abs/2202.13514)
 - [ByteTrack Paper](https://arxiv.org/abs/2110.06864) (low-confidence association tier of v1)
+- Cao, Thanh-Tung, et al. (2025). *A Combination of YOLO and OSNet Re-ID Neuronal Networks for Tracking Abnormalities in Upper Gastrointestinal Endoscopy Videos*. In **Information and Communication Technology**, pp. 55–68. Springer Nature Singapore. ISBN: 978-981-96-4285-4.
+- Cao, Thanh-Tung, et al. (2025). *OSNet-DCN: Integrating Deformable Feature Learning for Tracking Lesion in Endoscopic Videos*. In **2025 International Conference on Multimedia Analysis and Pattern Recognition (MAPR)**, pp. 1–6. https://doi.org/10.1109/MAPR67746.2025.11134015
+- Cao, Thanh-Tung, et al. (2026). *UTR-Track: Unscented Trajectory Reconstruction with Re-identification for Robust Lesion Tracking in Endoscopy Videos*. **Medical & Biological Engineering & Computing**. Accepted manuscript; currently in the publication process. Manuscript number: MBEC-D-26-01692R3.
 
 
 ## Contact
